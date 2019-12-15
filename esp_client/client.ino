@@ -6,14 +6,15 @@
 #include <string.h>
 #include <stdlib.h>
 
+#define ERROR_CHAR_LENGTH      1
 #define ATD_NO_ERROR           0x00
 #define ATD_CONVERSION_ONGOING 0x01
 #define ATD_POSITIVE_OVERRANGE 0x02
 #define ATD_NEGATIVE_OVERRANGE 0x04
 #define ATD_STALLED            0x08
 
-#define ATD_CONVERSION_TIME_MS           69
-#define ATD_SCLK_WAIT_MICROSEC           1
+#define ATD_CONVERSION_TIME_MS 69
+#define ATD_SCLK_WAIT_MICROSEC 1
 
 #define CONNECT_TIMEOUT_SECONDS 300
 
@@ -77,6 +78,7 @@ uint16_t avg_per_post;
 uint8_t *avg_buffer;
 uint16_t avg_buffer_ind;
 atd_average_t avg_alias;
+uint8_t error_alias;
 uint16_t connect_watchdog;
 
 uint32_t WS_IP;
@@ -87,6 +89,9 @@ ESP8266WebServer webserver(80);
 HTTPClient http;
 
 unsigned char server_complete;
+
+uint8_t sample_data_i;
+atd_sample_t sample_data[17];
 
 void atd_spi_read(){
     if(digitalRead(MISO_PIN)){
@@ -106,16 +111,19 @@ void atd_spi_read(){
     }
     if(!digitalRead(MISO_PIN)){
         // SDO low after reading 32 bits, something strange going on
-        atd_err_char = ATD_STALLED;
+        atd_err_char |= ATD_STALLED;
     }
 }
 
 void atd_get_average(){
-    avg_alias = ((atd_average_t *)(avg_buffer + 1 + MAC_ADDR_LEN + DEV_NAME_MAX_LEN))[avg_buffer_ind];
+    error_alias = *(MAC_ADDR_LEN + DEV_NAME_MAX_LEN + avg_buffer + ((ERROR_CHAR_LENGTH + sizeof(atd_average_t)) * avg_buffer_ind));
+    avg_alias = *((atd_average_t *)(&error_alias + ERROR_CHAR_LENGTH));
     atd_average_accum = 0;
     atd_average_counter = 0;
     while(atd_average_counter < samples_per_avg){
-        atd_spi_read();
+        sample_data_i++;
+        atd_glob_sample = sample_data[sample_data_i];
+        sample_data_i %= 17;
         if((atd_err_char & ATD_CONVERSION_ONGOING) > 0){
             continue;
         }
@@ -131,6 +139,8 @@ void atd_get_average(){
     avg_alias.sample_avg = atd_average_accum / atd_average_counter;
     avg_alias.delta_ms = millis() - atd_last_time_ms;
     atd_last_time_ms += avg_alias.delta_ms;
+    error_alias = atd_err_char;
+    atd_err_char = ATD_NO_ERROR;
 }
 
 void server_root_handler() {
@@ -139,10 +149,6 @@ void server_root_handler() {
     strcpy(pass, webserver.arg("pass").c_str());
     strcpy(target, webserver.arg("target").c_str());
     strcpy(dev_name, webserver.arg("dev_name").c_str());
-    Serial.println(ssid);
-    Serial.println(pass);
-    Serial.println(target);
-    Serial.println(dev_name);
     server_complete = 1;
   } else {
     webserver.send(200, "text/html", HTML_RESP_FORM);
@@ -165,6 +171,26 @@ void eeprom_write(char *src, uint16_t offset, uint16_t len) {
 
 uint16_t glob_eeprom_rw_index;
 void setup() {
+
+  sample_data_i = 0;
+  sample_data[0].value = 0x123456;
+  sample_data[1].value = 0x789abc;
+  sample_data[2].value = 0xdef012;
+  sample_data[3].value = 0x345678;
+  sample_data[4].value = 0x9abcde;
+  sample_data[5].value = 0xf01234;
+  sample_data[6].value = 0x56789a;
+  sample_data[7].value = 0xbcdef0;
+  sample_data[8].value = sample_data[0].value;
+  sample_data[9].value = sample_data[1].value;
+  sample_data[10].value = sample_data[2].value;
+  sample_data[11].value = sample_data[3].value;
+  sample_data[12].value = sample_data[4].value;
+  sample_data[13].value = sample_data[5].value;
+  sample_data[14].value = sample_data[6].value;
+  sample_data[15].value = sample_data[7].value;
+  sample_data[16].value = sample_data[8].value;
+
   pinMode(SCLK_PIN, OUTPUT);
   pinMode(MISO_PIN, INPUT);
   pinMode(LED_PIN, OUTPUT);
@@ -192,7 +218,7 @@ void setup() {
     WS_SUBNET = 0x00000000;
     server_complete = 0;
 
-    WiFi.softAPConfig(IPAddress(WS_IP), IPAddress(WS_GATEWAY), IPAddress(WS_SUBNET));
+    // WiFi.softAPConfig(IPAddress(WS_IP), IPAddress(WS_GATEWAY), IPAddress(WS_SUBNET));
     WiFi.softAP(WEBSERVER_SSID);
     Serial.println(WiFi.softAPIP());
     webserver.on("/", server_root_handler);
@@ -229,9 +255,9 @@ void setup() {
   }
   Serial.println("connected");
 
-  avg_buffer = (uint8_t *)malloc(1 + MAC_ADDR_LEN + DEV_NAME_MAX_LEN + (sizeof(atd_average_t) * avg_per_post));
-  WiFi.macAddress(1 + avg_buffer);
-  strcpy((char *)(1 + avg_buffer + MAC_ADDR_LEN), dev_name);
+  avg_buffer = (uint8_t *)malloc(MAC_ADDR_LEN + DEV_NAME_MAX_LEN + (ERROR_CHAR_LENGTH + (sizeof(atd_average_t)) * avg_per_post));
+  WiFi.macAddress(avg_buffer);
+  strcpy((char *)(avg_buffer + MAC_ADDR_LEN), dev_name);
 }
 
 void loop() {
@@ -241,24 +267,30 @@ void loop() {
   if(WiFi.status() != WL_CONNECTED){
     ESP.reset();
   }
-
-  avg_buffer[0] = atd_err_char;
-  atd_err_char = ATD_NO_ERROR;
   
   for (avg_buffer_ind = avg_per_post; avg_buffer_ind > 0; avg_buffer_ind--) {
     atd_get_average();
   }
+
   http.begin(target);
   http.addHeader("Content-Type", "text/plain");
-  http.POST(avg_buffer, 1 + MAC_ADDR_LEN + DEV_NAME_MAX_LEN + (sizeof(atd_average_t) * avg_per_post));
+  http.POST(avg_buffer, MAC_ADDR_LEN + DEV_NAME_MAX_LEN + ((ERROR_CHAR_LENGTH + sizeof(atd_average_t)) * avg_per_post));
+  Serial.println("posted");
 
   strcpy(dev_config, http.getString().c_str());
   http.end();
 
-  samples_per_avg = UINT16_VALUE(dev_config);
-  if(avg_per_post != UINT16_VALUE(dev_config + 2)){
+  Serial.println(UINT16_VALUE(dev_config), HEX);
+  Serial.println(UINT16_VALUE(dev_config + 2), HEX);
+  Serial.println(dev_config[4], HEX);
+
+  if(UINT16_VALUE(dev_config) > 0){
+    samples_per_avg = UINT16_VALUE(dev_config);
+  }
+  
+  if(avg_per_post != UINT16_VALUE(dev_config + 2) && UINT16_VALUE(dev_config + 2) > 0){
     avg_per_post = UINT16_VALUE(dev_config + 2);
-    avg_buffer = (uint8_t *)realloc(avg_buffer, 1 + MAC_ADDR_LEN + DEV_NAME_MAX_LEN + (sizeof(atd_average_t) * avg_per_post));
+    avg_buffer = (uint8_t *)realloc(avg_buffer, MAC_ADDR_LEN + DEV_NAME_MAX_LEN + ((ERROR_CHAR_LENGTH + sizeof(atd_average_t)) * avg_per_post));
   }
 
   if(dev_config[4] == RESET_PATTERN){

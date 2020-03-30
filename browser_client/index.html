@@ -2,5 +2,103 @@
     <head>
         <script src="//cdnjs.cloudflare.com/ajax/libs/dygraph/2.1.0/dygraph.min.js"></script>
         <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/dygraph/2.1.0/dygraph.min.css" />
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+        <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
+        <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
     </head>
+    <body onload="init_graphs();">
+        <div id="graphs" class="container-fluid"></div>
+        <script type="text/javascript">
+        
+            function get_manifest(){
+                let req = new XMLHttpRequest();
+                req.open("POST", "../getlogs.php", false);
+                req.setRequestHeader("Content-type", "text/plain");
+                req.send(String.fromCharCode(1));
+                return req.responseText;
+            }
+            
+            function get_log_file(file_name){
+                let req = new XMLHttpRequest();
+                req.open("POST", "../getlogs.php", false);
+                req.setRequestHeader("Content-type", "text/plain");
+                req.send(String.fromCharCode(0) + file_name);
+                return req.responseText;
+            }
+            
+            let graph_array = [];
+            let GRAPH_COLUMN_SPAN = 6;
+            let BOOTSTRAP_GRID_WIDTH = 12;
+            
+            function parse_sensor_name(filename){
+                return filename.split("-")[0];
+            }
+            
+            function display_graph_grid(){
+                let cont_div = document.getElementById("graphs");
+                cont_div.innerHTML = "";
+                let i = 0;
+                while(i < graph_array.length){
+                    let new_row = document.createElement("div");
+                    new_row.className = "row";
+                    let j;
+                    for(j = 0; j < BOOTSTRAP_GRID_WIDTH / GRAPH_COLUMN_SPAN; j++){
+                        if(i + j >= graph_array.length){
+                            break;
+                        }
+                        let new_col = document.createElement("div");
+                        new_col.className = "col-lg-" + GRAPH_COLUMN_SPAN;
+                        graph_array[i + j][0] = new Dygraph(new_col, graph_array[i + j][1], {
+                            labels: ["Date", "Sensor Value"],
+                            title: parse_sensor_name(graph_array[i + j][2]),
+                            xlabel: "Time and Date",
+                            ylabel: "Sensor Value",
+                            rightGap: 150,
+                            
+                        });
+                        new_row.appendChild(new_col);
+                    }
+                    i += j;
+                    cont_div.appendChild(new_row);
+                }
+                for(let i = 0; i < graph_array.length; i++){
+                    graph_array[i][0].resize();
+                }
+            }
+            
+            function parse_sensor_log(filename){
+                let file_log = get_log_file(filename);
+                let log_graph_array = [];
+                let log_entry_array = file_log.split("\n");
+                for(let j=0; j < log_entry_array.length - 1; j++){
+                    let temp_arr = log_entry_array[j].split(" | ");
+                    log_graph_array.push([new Date(temp_arr[0]), parseFloat(temp_arr[2])]);
+                }
+                return log_graph_array;
+            }
+            
+            function init_graphs(){
+                let files_string = get_manifest();
+                let files = files_string.split("\n");
+                for(let i=0;i<files.length - 1;i++){
+                    log_graph_array = parse_sensor_log(files[i]);
+                    graph_array.push([null, log_graph_array, files[i]]);
+                }
+                display_graph_grid();
+                for(let i = 0; i < graph_array.length; i++){
+                    graph_array[i][0].resize();
+                }
+            }
+            
+            function update_graphs(){
+                for(let i = 0; i < graph_array.length; i++){
+                    graph_array[i][1] = parse_sensor_log(graph_array[i][2]);
+                }
+                display_graph_grid();
+            }
+            
+        </script>
+        <button onclick="update_graphs();">Click</button>
+    </body>
 </html>

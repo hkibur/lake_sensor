@@ -19,7 +19,7 @@ if($data_len == 0){
 
 $mac_addr = bin2hex(substr($data_raw, 0, $mac_addr_len));
 $dev_name = strtok(substr($data_raw, $mac_addr_len, $device_name_len), "\x00");
-$filename = $dev_name . "-" . $mac_addr . ".txt";
+$filename = $dev_name . "-" . $mac_addr . ".log";
 $data_offset = $mac_addr_len + $device_name_len;
 
 $log_reverse_array = array();
@@ -29,7 +29,7 @@ if(($data_len - $data_offset) % $total_len == 0){
     $average_time = intval(microtime(true) * 1000);
     for($i = $data_offset; $i < $data_len; $i += $total_len){
         $unpacked_arr = unpack("Cerror/Pdelta_ms/eaverage", $data_raw, $i);
-        $log_string = date("Y-m-d H:i:s", intval($average_time / 1000)) . ":" . str_pad(strval($average_time % 10000), 4, "0", STR_PAD_RIGHT) . " | 0x" . str_pad(strtoupper(dechex($unpacked_arr["error"])), 2, "0", STR_PAD_LEFT) . " | " . strval($unpacked_arr["average"]) . "\n";
+        $log_string = date("Y-m-dTH:i:s", intval($average_time / 1000)) . "." . str_pad(strval($average_time % 10000), 4, "0", STR_PAD_RIGHT) . " | 0x" . str_pad(strtoupper(dechex($unpacked_arr["error"])), 2, "0", STR_PAD_LEFT) . " | " . strval($unpacked_arr["average"]) . "\n";
         $average_time -= $unpacked_arr["delta_ms"];
         array_unshift($log_reverse_array, $log_string);
     }

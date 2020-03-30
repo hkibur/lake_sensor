@@ -132,9 +132,10 @@ void atd_get_average(){
     atd_average_accum = 0;
     atd_average_counter = 0;
     while(atd_average_counter < samples_per_avg){
-        sample_data_i++;
-        atd_glob_sample = sample_data[sample_data_i];
-        sample_data_i %= 17;
+        // sample_data_i++;
+        // atd_glob_sample = sample_data[sample_data_i];
+        // sample_data_i %= 17;
+        atd_spi_read();
         if((atd_err_char & ATD_CONVERSION_ONGOING) > 0){
             continue; 
         }
@@ -184,24 +185,24 @@ void eeprom_write(char *src, uint16_t offset, uint16_t len) {
 uint16_t glob_eeprom_rw_index;
 void setup() {
 
-  sample_data_i = 0;
-  sample_data[0].value = 0x4FFFFF;
-  sample_data[1].value = 0x4FFFFF;
-  sample_data[2].value = 0xdef012;
-  sample_data[3].value = 0x345678;
-  sample_data[4].value = 0x9abcde;
-  sample_data[5].value = 0xf01234;
-  sample_data[6].value = 0x56789a;
-  sample_data[7].value = 0xbcdef0;
-  sample_data[8].value = sample_data[0].value;
-  sample_data[9].value = sample_data[1].value;
-  sample_data[10].value = sample_data[2].value;
-  sample_data[11].value = sample_data[3].value;
-  sample_data[12].value = sample_data[4].value;
-  sample_data[13].value = sample_data[5].value;
-  sample_data[14].value = sample_data[6].value;
-  sample_data[15].value = sample_data[7].value;
-  sample_data[16].value = sample_data[8].value;
+  // sample_data_i = 0;
+  // sample_data[0].value = 0x4FFFFF;
+  // sample_data[1].value = 0x4FFFFF;
+  // sample_data[2].value = 0xdef012;
+  // sample_data[3].value = 0x345678;
+  // sample_data[4].value = 0x9abcde;
+  // sample_data[5].value = 0xf01234;
+  // sample_data[6].value = 0x56789a;
+  // sample_data[7].value = 0xbcdef0;
+  // sample_data[8].value = sample_data[0].value;
+  // sample_data[9].value = sample_data[1].value;
+  // sample_data[10].value = sample_data[2].value;
+  // sample_data[11].value = sample_data[3].value;
+  // sample_data[12].value = sample_data[4].value;
+  // sample_data[13].value = sample_data[5].value;
+  // sample_data[14].value = sample_data[6].value;
+  // sample_data[15].value = sample_data[7].value;
+  // sample_data[16].value = sample_data[8].value;
 
   pinMode(SCLK_PIN, OUTPUT);
   pinMode(MISO_PIN, INPUT);
